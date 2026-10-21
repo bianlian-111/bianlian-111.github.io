@@ -245,6 +245,8 @@ body::before{
   color:#211003;background:linear-gradient(180deg,#f7e3ac,#e8c46a);
   border-color:#f7e3ac;box-shadow:0 0 22px rgba(232,196,106,.4);
 }
+.diff-btn small{display:block;font-size:10px;font-weight:400;letter-spacing:.06em;margin-top:5px;opacity:.72;}
+.diff-btn.sel small{opacity:.85;}
 
 .pause-mark{font-size:58px;color:var(--gold-2);margin:14px 0 4px;text-shadow:0 0 30px rgba(232,196,106,.45);}
 .btn-ghost{
@@ -333,9 +335,9 @@ body::before{
   <div class="difficulty">
     <div class="difficulty-label">择 一 难 度</div>
     <div class="diff-options" id="diffOptions">
-      <button class="diff-btn sel" data-diff="normal" type="button">普通</button>
-      <button class="diff-btn" data-diff="easy" type="button">简单</button>
-      <button class="diff-btn" data-diff="hard" type="button">困难</button>
+      <button class="diff-btn" data-diff="easy" type="button">学徒<small>入梨园 · 稳扎稳打</small></button>
+      <button class="diff-btn sel" data-diff="normal" type="button">台柱<small>挑大梁 · 眼疾手快</small></button>
+      <button class="diff-btn" data-diff="hard" type="button">宗师<small>镇全场 · 电光石火</small></button>
     </div>
   </div>
   <button class="btn-start" id="btnStart">开 戏</button>
@@ -620,9 +622,9 @@ function sfxThud(){
 
 /* ==================== 游戏状态 ==================== */
 const DIFFS = {
-  easy:   { name:'简单', base:1000, min:480, accel:0.955, lives:7, livesCn:'七' },
-  normal: { name:'普通', base:840,  min:370, accel:0.93,  lives:5, livesCn:'五' },
-  hard:   { name:'困难', base:640,  min:340, accel:0.90,  lives:3, livesCn:'三' }
+  easy:   { name:'学徒', base:1000, min:480, accel:0.955, lives:7, livesCn:'七' },
+  normal: { name:'台柱', base:840,  min:370, accel:0.93,  lives:5, livesCn:'五' },
+  hard:   { name:'宗师', base:640,  min:340, accel:0.90,  lives:3, livesCn:'三' }
 };
 let SEL_DIFF = 'normal';
 let ACHV_UNLOCK = [];
