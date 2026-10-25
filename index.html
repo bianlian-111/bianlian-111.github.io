@@ -148,6 +148,20 @@ body::before{
 .btn-liang:active{transform:scale(.975);box-shadow:0 0 30px rgba(232,196,106,.4);}
 .btn-liang:disabled{opacity:.3;cursor:default;}
 
+/* ---- 护盾技能 ---- */
+.skill-bar{display:flex;align-items:center;gap:10px;width:100%;margin-top:10px;}
+.energy-wrap{position:relative;flex:1;height:18px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(232,196,106,.35);overflow:hidden;}
+.energy-fill{height:100%;width:0%;background:linear-gradient(90deg,#8a6a2a,#e8c46a 60%,#f7e3ac);transition:width .3s ease;}
+.energy-wrap.full .energy-fill{animation:energyPulse .9s infinite;}
+@keyframes energyPulse{50%{filter:brightness(1.4);}}
+.energy-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;letter-spacing:.34em;text-indent:.34em;color:rgba(242,230,207,.9);text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none;}
+.btn-shield{flex:0 0 auto;padding:0 18px;height:40px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:800;letter-spacing:.1em;color:#dcecff;background:linear-gradient(180deg,#41586e,#2b3c4e);border:1px solid rgba(159,210,255,.4);cursor:pointer;transition:all .2s;}
+.btn-shield:disabled{opacity:.32;cursor:default;}
+.btn-shield.ready{color:var(--ink);background:linear-gradient(180deg,#cfe8ff,#9fd2ff);border-color:#eaf6ff;box-shadow:0 0 16px rgba(159,210,255,.7);animation:shieldReady 1s infinite;}
+@keyframes shieldReady{50%{box-shadow:0 0 30px rgba(159,210,255,1);transform:scale(1.05);}}
+.ring.shield{border:2px solid rgba(159,210,255,.85);box-shadow:0 0 26px rgba(140,190,255,.6), inset 0 0 20px rgba(140,190,255,.35);animation:spin 30s linear infinite, shieldGlow 1.2s ease-in-out infinite;}
+@keyframes shieldGlow{50%{box-shadow:0 0 44px rgba(159,210,255,.95), inset 0 0 30px rgba(140,190,255,.55);}}
+
 /* ---------- 遮罩 ---------- */
 .overlay{
   position:fixed;inset:0;z-index:10;
@@ -316,9 +330,17 @@ body::before{
     <div class="face" id="face"></div>
   </div>
 
+  <div class="skill-bar">
+    <div class="energy-wrap" id="energyWrap">
+      <div class="energy-fill" id="energyFill"></div>
+      <span class="energy-label">内 力</span>
+    </div>
+    <button class="btn-shield" id="btnShield" type="button" disabled>🛡 护盾</button>
+  </div>
+
   <button class="btn-liang" id="liang" type="button" disabled>
     亮 相
-    <small>空格 / 点击</small>
+    <small>空格 / 点击 · S键护盾</small>
   </button>
 </div>
 
@@ -331,6 +353,7 @@ body::before{
     <p><span>贰</span>看清上方<em>戏令</em>所指的颜色。</p>
     <p><span>叁</span>目标出现的瞬间，按<em>亮相</em>定格。</p>
     <p><span>肆</span>变错一张，折损一条命，共<span id="rulesLives">五</span>命。</p>
+    <p><span>伍</span>亮相积攒<em>内力</em>，满时释放<em>护盾</em>，可抵挡一次失误。</p>
   </div>
   <div class="difficulty">
     <div class="difficulty-label">择 一 难 度</div>
@@ -619,6 +642,32 @@ function sfxThud(){
   o.connect(g); g.connect(masterGain);
   o.start(t); o.stop(t + 0.46);
 }
+function sfxShield(){
+  if (!AC || !SND_ON) return;
+  const t = AC.currentTime;
+  [523, 659, 784, 1046].forEach(function(f, i){
+    const o = AC.createOscillator(); o.type = 'triangle';
+    o.frequency.value = f;
+    const g = AC.createGain();
+    const st = t + i * 0.07;
+    g.gain.setValueAtTime(0.15, st);
+    g.gain.exponentialRampToValueAtTime(0.001, st + 0.3);
+    o.connect(g); g.connect(masterGain);
+    o.start(st); o.stop(st + 0.32);
+  });
+}
+function sfxBlock(){
+  if (!AC || !SND_ON) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(); o.type = 'square';
+  o.frequency.setValueAtTime(880, t);
+  o.frequency.exponentialRampToValueAtTime(220, t + 0.18);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.18, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o.stop(t + 0.3);
+}
 
 /* ==================== 游戏状态 ==================== */
 const DIFFS = {
@@ -634,7 +683,8 @@ const G = {
   lives:DIFFS.normal.lives, totalLives:DIFFS.normal.lives,
   hits:0, shots:0, face:0, cmd:0, lastCmd:-1,
   speed:DIFFS.normal.base, minSpeed:DIFFS.normal.min, accel:DIFFS.normal.accel,
-  timer:null, lockUntil:0, flawless:true
+  timer:null, lockUntil:0, flawless:true,
+  energy:0, shield:false, shieldBlocks:0, shieldUses:0
 };
 
 function renderFace(i, animate){
@@ -668,6 +718,32 @@ function updateHUD(){
   elScore.textContent = G.score;
   elCombo.textContent = G.combo;
   renderLives();
+}
+function updateEnergy(){
+  const fill = document.getElementById('energyFill');
+  const wrap = document.getElementById('energyWrap');
+  const btn = document.getElementById('btnShield');
+  if (fill) fill.style.width = G.energy + '%';
+  if (wrap) wrap.classList.toggle('full', G.energy >= 100);
+  if (btn){
+    const ready = G.running && !G.paused && G.energy >= 100 && !G.shield;
+    btn.disabled = !ready;
+    btn.classList.toggle('ready', ready);
+    btn.textContent = G.shield ? '🛡 护盾中' : '🛡 护盾';
+  }
+}
+function updateShield(){
+  const ring = document.querySelector('.ring');
+  if (ring) ring.classList.toggle('shield', G.shield);
+  updateEnergy();
+}
+function castShield(){
+  if (!G.running || G.paused || G.shield || G.energy < 100) return;
+  G.energy = 0; G.shield = true; G.shieldUses++;
+  sfxShield();
+  updateShield();
+  const r = faceEl.getBoundingClientRect();
+  floatText('🛡 护盾加持', r.left + r.width / 2, r.top + r.height * 0.18, '#9fd2ff');
 }
 function floatText(text, x, y, color){
   const d = document.createElement('div');
@@ -720,6 +796,8 @@ function hitFace(){
 
   if (G.combo > 1) bump(elCombo);
   bump(elScore);
+  G.energy = Math.min(100, G.energy + 10);
+  updateEnergy();
   G.speed = Math.max(G.minSpeed, G.speed * G.accel);
   updateHUD();
   checkAndUnlock();
@@ -731,6 +809,20 @@ function hitFace(){
 
 function missFace(){
   G.shots++;
+  if (G.shield){
+    G.shield = false;
+    G.shieldBlocks++;
+    G.combo = 0;
+    sfxBlock();
+    updateShield();
+    const sr = faceEl.getBoundingClientRect();
+    floatText('🛡 护盾抵挡', sr.left + sr.width / 2, sr.top + sr.height * 0.32, '#9fd2ff');
+    burstFrom(faceEl, ['#9fd2ff', '#cfe8ff', '#6e8aa5', '#ffffff'], 26, 6);
+    checkAndUnlock();
+    clearTimeout(G.timer);
+    G.timer = setTimeout(tick, G.speed * 1.35);
+    return;
+  }
   G.combo = 0;
   G.lives--;
   sfxThud();
@@ -776,6 +868,8 @@ function startGame(){
   G.lives = diff.lives; G.totalLives = diff.lives;
   G.speed = diff.base; G.minSpeed = diff.min; G.accel = diff.accel;
   G.flawless = true;
+  G.energy = 0; G.shield = false; G.shieldBlocks = 0; G.shieldUses = 0;
+  updateEnergy(); updateShield();
   G.face = Math.floor(Math.random() * FACES.length);
   G.lastCmd = -1;
   G.lockUntil = performance.now() + 300;
@@ -809,6 +903,7 @@ function gameOver(){
   G.running = false;
   clearTimeout(G.timer);
   $('#liang').disabled = true;
+  updateEnergy();
 
   const acc = G.shots ? Math.round(G.hits / G.shots * 100) : 0;
   let rank = RANKS[RANKS.length - 1];
@@ -848,12 +943,14 @@ function pauseGame(){
   clearTimeout(G.timer);
   $('#pausePanel').classList.add('show');
   $('#btnPause').textContent = '▶';
+  updateEnergy();
 }
 function resumeGame(){
   if (!G.paused) return;
   G.paused = false;
   $('#pausePanel').classList.remove('show');
   $('#btnPause').textContent = '⏸';
+  updateEnergy();
   clearTimeout(G.timer);
   G.timer = setTimeout(tick, Math.max(360, G.speed * 1.15));
 }
@@ -875,7 +972,9 @@ const ACHV = [
   { id:'score1k', icon:'💯', name:'千面',     desc:'单局得分达到 1000',   test:function(){ return G.score >= 1000; } },
   { id:'score2k', icon:'👑', name:'金面',     desc:'单局得分达到 2000',   test:function(){ return G.score >= 2000; } },
   { id:'score3k', icon:'🏆', name:'变脸宗师', desc:'单局得分达到 3000',   test:function(){ return G.score >= 3000; } },
-  { id:'flawless',icon:'✨', name:'零失误',   desc:'单局从头到尾一次不错', test:function(){ return G.shots > 0 && G.hits === G.shots; } }
+  { id:'flawless',icon:'✨', name:'零失误',   desc:'单局从头到尾一次不错', test:function(){ return G.shots > 0 && G.hits === G.shots; } },
+  { id:'shield3', icon:'🛡', name:'金钟罩',   desc:'单局护盾抵挡 3 次失误', test:function(){ return G.shieldBlocks >= 3; } },
+  { id:'shield5', icon:'⚡', name:'铁布衫',   desc:'单局释放护盾 5 次',     test:function(){ return G.shieldUses >= 5; } }
 ];
 function saveAchv(){
   try { localStorage.setItem('bianlian_achv', JSON.stringify(ACHV_UNLOCK)); } catch(e){}
@@ -974,6 +1073,11 @@ document.addEventListener('keydown', function(e){
     else if (G.running && !$('#pausePanel').classList.contains('show')) pauseGame();
     return;
   }
+  if (k === 's' || k === 'S'){
+    e.preventDefault();
+    castShield();
+    return;
+  }
   if (e.code === 'Space' || k === ' ' || k === 'Enter'){
     e.preventDefault();
     if (G.paused){ resumeGame(); return; }
@@ -1000,6 +1104,10 @@ $('#btnSound').addEventListener('click', function(){
 });
 $('#btnPause').addEventListener('click', function(){
   if (G.paused) resumeGame(); else pauseGame();
+});
+$('#btnShield').addEventListener('pointerdown', function(e){
+  e.preventDefault();
+  castShield();
 });
 $('#btnResume').addEventListener('click', resumeGame);
 $('#btnRestart').addEventListener('click', function(){
